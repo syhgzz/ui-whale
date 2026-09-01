@@ -1,0 +1,44 @@
+{
+  "name": "ui-whale",
+  "version": "1.0.0",
+  "description": "A cute deep-sea whale that swims across the DeepSeek Harness web surface; click it to spray water and see today's per-model token usage and estimated cost.",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-typert-protocol": "^0.1.1-rc.2"
+  },
+  "files": [
+    "lib/",
+    "README.md",
+    "LICENSE",
+    "cordis.patch.yml.example"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "whale",
+    "usage",
+    "token-usage"
+  ]
+}

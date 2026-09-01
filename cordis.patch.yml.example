@@ -1,0 +1,7 @@
+# ui-whale — composition patch for ~/.dsh/profiles/web/cordis.patch.yml
+#
+# Copy the top-level list item below into your profile's cordis.patch.yml
+# (merge with the existing entries), then restart the dsh web process.
+- insert:
+    - id: ui-whale
+      name: 'ui-whale'
