@@ -100,6 +100,20 @@ dsh --profile web
 ## 使用
 
 - 点击鲸鱼 → 喷水 + 弹今日账单（30 秒后自动消失，可点右上角 × 关闭）
-- 账单为人民币（¥）：余额来自 DeepSeek 官方 `/user/balance` 接口（原生 CNY），费用为估算值（仅供参考）；按「Pro 模型 / Flash-Vision-Exp / 其他模型」分组展示今日 token 与成本
+- 账单为人民币（¥）：余额来自 DeepSeek 官方 `/user/balance` 接口（原生 CNY）；**精确消费来自平台用量页**（`platform.deepseek.com/usage` 背后的用量 API，需配置平台登录 Token，见下）；按「Pro 模型 / Flash-Vision-Exp / 其他模型」分组展示今日 token 与成本
 - 悬浮层不遮挡页面交互（除鲸鱼本体和关闭按钮外点击穿透）
+
+### 配置平台 Token（查看精确消费）
+
+1. 浏览器登录 [platform.deepseek.com](https://platform.deepseek.com) → F12 开发者工具 → Application → Local Storage
+2. 找到值以 `eyJ` 开头的登录 token（JWT）并复制
+3. 写入 `~/.dsh/.credentials.yaml`（或环境变量 `DEEPSEEK_PLATFORM_TOKEN`），然后重启 dsh：
+
+```yaml
+refs:
+  DEEPSEEK_API_KEY: sk-xxxx              # 原有：余额接口用
+  DEEPSEEK_PLATFORM_TOKEN: eyJhbGci...   # 新增：平台用量抓取用
+```
+
+未配置或 Token 失效时，账单仍然显示今日 token（本机会话日志）与余额，费用区域显示登录提示，不做估算。
 
