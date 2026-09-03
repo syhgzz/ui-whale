@@ -1,6 +1,6 @@
 {
   "name": "ui-whale",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A cute deep-sea whale that swims across the DeepSeek Harness web surface; click it to spray water and see today's per-model token usage and estimated cost.",
   "license": "MIT",
   "type": "module",
