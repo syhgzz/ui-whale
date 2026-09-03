@@ -101,14 +101,18 @@ pnpm add link:/home/<you>/projects/dsh-ui-whale
 
 等价做法：手动编辑 `~/.dsh/profiles/web/package.json` 加入上述依赖行，再 `pnpm install`。
 
-> ⚠️ **符号链接安装必须先补齐 peer 依赖**：Node 默认把符号链接解析成真实路径，包内 `import '@deepseek-ai/dsh-typert-protocol'` 会从**仓库目录**向上解析，而 dsh 树不在它的 node_modules 链上。因此在源码目录先执行一次：
+> ⚠️ **符号链接安装必须先补齐 peer 依赖**：Node 默认把符号链接解析成真实路径，包内 `import '@deepseek-ai/dsh-typert-protocol'` 会从**仓库目录**向上解析，而 dsh 树不在它的 node_modules 链上。因此在源码目录先执行一次安装（二选一）：
 
 > ```bash
 > cd ~/projects/dsh-ui-whale
-> pnpm install      # 自动补齐 @deepseek-ai/cordis、@deepseek-ai/dsh-typert-protocol 到仓库 node_modules
+> pnpm install   # 推荐：自动补齐两个 peer 到仓库 node_modules，且不改 package.json
+>
+> # 或显式安装这两个依赖（版本与 package.json 的 peerDependencies 声明一致；
+> # 注意会把它们写入仓库 package.json 的 dependencies）：
+> pnpm add @deepseek-ai/cordis@^4.0.1 @deepseek-ai/dsh-typert-protocol@^0.1.1-rc.2
 > ```
 
-> 不做这一步会在启动时报 `failed to import loader entry ui-whale ... Cannot find package '@deepseek-ai/dsh-typert-protocol'`（git 安装无此问题：pnpm 会把包放进 .pnpm 虚拟商店并链接好 peer）。
+> 验证：`ls node_modules/@deepseek-ai` 应出现 `cordis` 与 `dsh-typert-protocol`。不做这一步会在启动时报 `failed to import loader entry ui-whale ... Cannot find package '@deepseek-ai/dsh-typert-protocol'`（git 安装无此问题：pnpm 会把包放进 .pnpm 虚拟商店并链接好 peer）。
 
 > npm 没有 `link:` 语义，等价写 `npm i /home/<you>/projects/dsh-ui-whale`（复制安装，改码后需重装）；yarn 用 `yarn add link:/home/<you>/projects/dsh-ui-whale`。
 
