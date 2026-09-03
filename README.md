@@ -18,7 +18,7 @@ ui-whale/
 
 ## 安装
 
-两种方式任选其一：最终都是让 profile 的 `node_modules` 里出现 `ui-whale`，并加入组合。
+两种方式任选其一：
 
 ### 方式一：网络安装（git）
 
@@ -102,48 +102,3 @@ dsh --profile web
 - 点击鲸鱼 → 喷水 + 弹今日账单（约 6.5 秒后自动消失）
 - 悬浮层不遮挡页面交互（除鲸鱼本体外点击穿透）
 
-## 验证安装成功
-
-- 启动日志没有 `failed to import loader entry` 与 `client-modules:` 开头的错误
-- `dsh --profile web --dump-config | grep -A1 ui-whale` 能看到组合行
-- `curl -o /dev/null -w '%{http_code}\n' http://127.0.0.1:<web端口>/plugins/ui-whale/client.js` 返回 200
-- 刷新页面后鲸鱼出现
-
-## 卸载
-
-1. 从 `~/.dsh/profiles/web/cordis.patch.yml` 删除 `ui-whale` 的 `insert` 块
-2. 移除依赖：`cd ~/.dsh/profiles/web && pnpm remove ui-whale`
-3. 重启 `dsh --profile web`
-
-## 常见问题
-
-**鲸鱼没出现？**
-- 确认 `insert` 块缩进为顶层列表项（`-` 顶格）；`dsh --profile web --dump-config | grep -A1 ui-whale` 能看到组合行
-- 方式二先确认源码目录 `node_modules/@deepseek-ai` 有 `cordis`、`dsh-typert-protocol`
-- **改完组合必须重启 dsh**，重启后刷新页面；浏览器控制台查看 `ui-whale` 相关错误
-
-**点鲸鱼显示「账单掉进海里了」？**
-- 一般是 host 面 `whale` 服务未注册（检查组合行或启动日志中的 typert 报错）；若完全没有调用记录会显示「今天还没有吐过泡泡呢～」
-
-**费用准吗？**
-- token 是供应商上报的真实用量；费用按 DeepSeek 公开单价（输入 $0.28/M、缓存命中 $0.028/M、输出 $0.42/M）估算，不同计费计划有差异，界面已标注「仅供参考」
-
-**改颜色 / 游速 / 大小？**
-- 所有样式在 `lib/client.js` 顶部的 `CSS` 常量里（游速 `70s`、大小 `150px`、渐变颜色等）
-- 方式二改 `lib/client.js` 无需重启（自动热替换）；改 `lib/index.js` 需重启
-
-## 原理速览
-
-```
-浏览器 (lib/client.js)                    Host (lib/index.js)
-─────────────────────                    ───────────────────
-shell.overlay 渲染鲸鱼                     Service 'whale'
-点击 → ctx.remote.whale.usage()  ───────→  sessionQuery 读取所有会话日志
-今日账单泡泡卡 ←────── JSON 结果 ──────────  按模型聚合今日 usage + 价格表估算
-```
-
-Client ↔ Host 通过 dsh 自带 Typert Gateway 的 JSON RPC 通信；本包手写 `src-json` 编码的 Remote 贡献，无构建管线。
-
-## License
-
-MIT
