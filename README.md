@@ -63,7 +63,7 @@ dsh --profile web
 
 重启后**刷新页面**即可看到鲸鱼。
 
-> 说明：`cordis.patch.yml` 会被 dsh 的 HMR 按精确路径监听，保存后宿主侧一般无需重启即可应用；但浏览器端插件清单是页面加载时注入的，新增模块仍需刷新页面。若补丁没生效，重启 dsh 最稳妥。
+> ⚠️ **组合文件只在启动时读取，改完必须重启**——web 表面没有补丁热加载（`dsh-web-app` 的 bundle 补丁里 `- id: hmr / disabled: true` 显式禁用了共享 HMR，原因见「组合行详解 · 生效时机」）。重启后浏览器只需刷新页面，插件清单就是页面加载时注入的。
 
 ---
 
@@ -100,6 +100,15 @@ pnpm add link:/home/<you>/projects/dsh-ui-whale
 ```
 
 等价做法：手动编辑 `~/.dsh/profiles/web/package.json` 加入上述依赖行，再 `pnpm install`。
+
+> ⚠️ **符号链接安装必须先补齐 peer 依赖**：Node 默认把符号链接解析成真实路径，包内 `import '@deepseek-ai/dsh-typert-protocol'` 会从**仓库目录**向上解析，而 dsh 树不在它的 node_modules 链上。因此在源码目录先执行一次：
+
+> ```bash
+> cd ~/projects/dsh-ui-whale
+> pnpm install      # 自动补齐 @deepseek-ai/cordis、@deepseek-ai/dsh-typert-protocol 到仓库 node_modules
+> ```
+
+> 不做这一步会在启动时报 `failed to import loader entry ui-whale ... Cannot find package '@deepseek-ai/dsh-typert-protocol'`（git 安装无此问题：pnpm 会把包放进 .pnpm 虚拟商店并链接好 peer）。
 
 > npm 没有 `link:` 语义，等价写 `npm i /home/<you>/projects/dsh-ui-whale`（复制安装，改码后需重装）；yarn 用 `yarn add link:/home/<you>/projects/dsh-ui-whale`。
 
@@ -162,7 +171,7 @@ ln -sfn /home/<you>/projects/dsh-ui-whale ~/.dsh/profiles/web/node_modules/ui-wh
 ls -l ~/.dsh/profiles/web/node_modules/ui-whale
 ```
 
-然后照常加入组合行（见下方「共用步骤」）并重启。
+然后照常加入组合行（见下方「共用步骤」）并重启。方式 3 与方式 1 一样是**符号链接**，同样需要先在源码目录 `pnpm install` 补齐 peer 依赖（见「方式 1」的⚠️说明）。
 
 **卸载（方式 3）**
 
@@ -193,7 +202,7 @@ rm -f ~/.dsh/profiles/web/node_modules/ui-whale
 dsh --profile web
 ```
 
-补丁文件本身由 HMR 监听（保存后无需重启）；但**首次**安装后重启 dsh 最稳妥，随后刷新页面即可。
+**组合文件只在启动时读取，改完必须重启**（web 表面没有补丁热加载，原因见「组合行详解 · 生效时机」）；重启后刷新页面即可。
 
 ---
 
@@ -229,8 +238,9 @@ dsh --profile web
 
 ### 生效时机
 
-- 补丁文件由 dsh 的 HMR 按精确路径监听：保存 `cordis.patch.yml` 后宿主侧重新解析并应用，**一般无需重启**；但浏览器端插件清单是在页面加载时注入的，新增模块需要**刷新页面**才看得到鲸鱼。
-- 排错顺序：① 缩进是否为顶层列表项（与原有条目同级）→ ② 依赖是否装好（`ls ~/.dsh/profiles/web/node_modules/ui-whale`）→ ③ 重启后看启动日志（`failed to import loader entry` / `client-modules:` / `patch:` 警告）→ ④ 刷新页面 → ⑤ 浏览器控制台。
+- **组合文件只在启动时读取**：`dsh-web-app` 的 bundle 补丁里 `- id: hmr / disabled: true` 显式禁用了共享 HMR（源码留有 “TODO: Re-enable shared HMR for Web”），所以在 web 表面编辑 `cordis.patch.yml` **不会热加载，改完必须重启 `dsh --profile web`**。
+- 重启后 host 半边（`whale` 服务）即已挂载；浏览器端插件清单是页面加载时注入的，**刷新页面**即可看到鲸鱼（新增模块不会自动推送给已打开的页面）。
+- 排错顺序：① 缩进是否为顶层列表项（与原有条目同级）→ ② 依赖与 peer 是否装好（`ls ~/.dsh/profiles/web/node_modules/ui-whale`；方式 1/3 还需源码目录 `pnpm install`）→ ③ `dsh --profile web --dump-config | grep -A2 ui-whale` 确认组合生效 → ④ 重启后看启动日志（`failed to import loader entry` / `client-modules:` / `patch:` 警告）→ ⑤ 刷新页面 → ⑥ 浏览器控制台。
 
 ---
 
@@ -241,7 +251,8 @@ dsh --profile web
 
 ## 验证安装成功
 
-- 启动日志没有 `client-modules:` 开头的错误
+- 启动日志没有 `failed to import loader entry` 与 `client-modules:` 开头的错误
+- `dsh --profile web --dump-config | grep -A1 ui-whale` 能看到组合行
 - `curl http://127.0.0.1:<web端口>/plugins/ui-whale/client.js` 返回 200 与 bundle 内容
 - 刷新页面后鲸鱼出现
 
@@ -258,11 +269,14 @@ dsh --profile web
 **鲸鱼没出现？**
 - 确认 `insert` 块缩进为顶层列表项、与原有条目同级
 - 确认安装成功：`ls ~/.dsh/profiles/web/node_modules/ui-whale` 存在（方式 1/3 应看到 `->` 符号链接）
-- 刚改过组合文件？先**刷新页面**（新增模块不会自动推送给已打开的页面）；没生效再重启 dsh 进程
+- 确认组合已生效：`dsh --profile web --dump-config | grep -A2 ui-whale` 能打印出 `id: ui-whale` 一行
+- 方式 1/3 先确认源码目录 `node_modules` 里已 `pnpm install` 补齐 peer（否则启动报 `failed to import loader entry`）
+- **改完组合文件必须重启 dsh**（组合只在启动时读取），重启后**刷新页面**；新增模块不会自动推送给已打开的页面
 - 浏览器控制台查看是否有 `ui-whale` 相关加载错误
 
 **`pnpm add link:...` 报 peer 依赖警告？**
-- `@deepseek-ai/cordis`、`@deepseek-ai/dsh-typert-protocol` 由 dsh 自带插件树提供，警告可忽略；确认 profile 的 lockfile 正常 `pnpm install` 即可
+- `@deepseek-ai/cordis`、`@deepseek-ai/dsh-typert-protocol` 由 dsh 自带插件树提供，git / tarball 安装（放进 .pnpm 虚拟商店）自动链接，警告可忽略
+- 但 **`link:` / 手动符号链接安装**不会自动安装 peer（符号链接解析到仓库真实路径，dsh 树不在其解析链上），必须在源码目录先 `pnpm install`，否则启动时报 `failed to import loader entry`（详见「方式 1」的⚠️说明）
 
 **点鲸鱼显示「账单掉进海里了」？**
 - 一般是 host 面 `whale` 服务未注册（检查组合行或启动日志中的 typert 报错）
