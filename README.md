@@ -1,6 +1,6 @@
 # 🐳 ui-whale
 
-一只小鲸鱼缓缓从 **DeepSeek Harness**（dsh）web 界面左边游向右边（70 秒一趟，上下漂浮 + 摆尾）。点击它会喷水，并弹出一张「今日小账单」：按模型展示今天的 token 用量（↑输入 / ↓输出 / 缓存）与估算费用。纯 CSS/SVG 动画，无外部资源；系统开启 `prefers-reduced-motion` 时静止显示。
+一只小鲸鱼缓缓从 **DeepSeek Harness**（dsh）web 界面左边游向右边（70 秒一趟，上下漂浮 + 摆尾）。点击它会喷水，并弹出一张「今日小账单」：按模型展示今天的 token 用量（↑输入 / ↓输出 / 缓存）与估算费用。纯 CSS/SVG 动画，无外部资源；系统开启 `prefers-reduced-motion` 时静止显示（点击也不再播放喷水动画）。
 
 ## 环境要求
 
@@ -110,10 +110,13 @@ dsh --profile web
 3. 写入 `~/.dsh/.credentials.yaml`（或环境变量 `DEEPSEEK_PLATFORM_TOKEN`），然后重启 dsh：
 
 ```yaml
+version: 1
 refs:
   DEEPSEEK_API_KEY: sk-xxxx              # 原有：余额接口用
   DEEPSEEK_PLATFORM_TOKEN: eyJhbGci...   # 新增：平台用量抓取用
 ```
+
+> ⚠️ `version: 1` 是**必填**的顶层键：dsh 只读 version 1 的布局，缺了会在启动时报 `uses the pre-release flat layout`，整个 credentials 服务都起不来。该文件还必须仅属主可读 —— 建好后执行 `chmod 600 ~/.dsh/.credentials.yaml`，否则 dsh 会报 `readable beyond its owner` 并跳过整个 credentials 服务。
 
 未配置或 Token 失效时，账单仍然显示今日 token（本机会话日志）与余额，费用区域显示登录提示，不做估算。
 
