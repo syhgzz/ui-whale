@@ -149,7 +149,7 @@ test('the bubble is shifted when the whale sits near a viewport edge', () => {
   assert.deepEqual(bubble.props.style, { marginLeft: -120 })
 })
 
-test('the bubble offers close and hide actions', () => {
+test('the bubble offers icon close and hide actions, in that order', () => {
   const store = new Map()
   globalThis.localStorage = {
     getItem: (key) => (store.has(key) ? store.get(key) : null),
@@ -158,19 +158,37 @@ test('the bubble offers close and hide actions', () => {
   }
   try {
     const tree = render([1, 'ready', BALANCE_VALUE, 0, null, false, false])
+    assert.equal(textOf(tree).includes('隐藏鲸鱼'), false, 'hide is an icon button, not a text button')
+
     const close = byClass(tree, 'whl-close')
     assert.equal(close.props['aria-label'], '关闭')
+    assert.equal(close.props.title, '关闭')
     close.props.onClick()
     assert.deepEqual(setterLog, ['idle'], 'clicking × collapses the bubble')
 
     setterLog = []
-    const hide = findAll(tree, (node) => node.props.className === 'whl-action' && node.children.includes('隐藏鲸鱼'))[0]
-    assert.ok(hide, 'the bubble offers 隐藏鲸鱼')
+    const hide = byClass(tree, 'whl-hide')
+    assert.ok(hide, 'the bubble offers an icon hide button')
+    assert.equal(hide.props['aria-label'], '隐藏鲸鱼')
+    assert.equal(hide.props.title, '隐藏鲸鱼')
     hide.props.onClick()
-    assert.deepEqual(setterLog, ['idle', true], 'clicking 隐藏鲸鱼 collapses the bubble and hides the whale')
+    assert.deepEqual(setterLog, ['idle', true], 'clicking hide collapses the bubble and hides the whale')
     assert.equal(store.get('ui-whale:hidden'), '1', 'the hide choice is persisted')
+
+    const buttons = findAll(tree, (node) => node.type === 'button')
+    const closeIndex = buttons.findIndex((node) => node.props.className === 'whl-close')
+    const hideIndex = buttons.findIndex((node) => node.props.className === 'whl-hide')
+    assert.ok(hideIndex >= 0 && hideIndex < closeIndex, 'hide renders before (left of) close')
   } finally {
     delete globalThis.localStorage
+  }
+})
+
+test('both icon buttons appear in every bubble state', () => {
+  for (const phase of ['loading', 'ready', 'error']) {
+    const tree = render([1, phase, phase === 'ready' ? BALANCE_VALUE : null, 0, null, false, false])
+    assert.ok(byClass(tree, 'whl-hide'), `hide icon in ${phase}`)
+    assert.ok(byClass(tree, 'whl-close'), `close icon in ${phase}`)
   }
 })
 
@@ -184,14 +202,18 @@ test('a placed whale offers 继续游动, and no other state does', () => {
   assert.deepEqual(swimmer.props.style, { left: '40px', top: '60px', animation: 'none' })
   const idleTree = render([1, 'ready', BALANCE_VALUE, 0, null, false, false])
   assert.equal(textOf(idleTree).includes('继续游动'), false, 'a swimming whale has no resume action')
+  assert.equal(byClass(idleTree, 'whl-actions'), undefined, 'no empty action row when swimming')
 })
 
-test('hidden state renders only the restore chip', () => {
+test('hidden state renders only the bare whale restore chip', () => {
   const tree = render([0, 'idle', null, 0, null, false, true])
   assert.equal(findAll(tree, (node) => node.props.role === 'button').length, 0, 'the whale itself is gone')
   const restore = byClass(tree, 'whl-restore')
   assert.ok(restore, 'a restore chip is offered instead')
   assert.equal(restore.props['aria-label'], '显示鲸鱼')
+  const mark = findAll(restore, (node) => node.props.className === 'whl-mark')[0]
+  assert.ok(mark, 'the restore affordance is the whale mark itself, not a chrome button')
+  assert.equal(mark.type, 'svg')
 })
 
 test('clampWhalePosition keeps the whole whale on screen', () => {
