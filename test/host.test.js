@@ -300,9 +300,9 @@ test('the service registers a complete typert contribution and serves usage thro
   assert.equal(contribution.face, 'host')
   assert.deepEqual(contribution.schemas, [])
   assert.deepEqual(contribution.model, { services: [], events: [], objects: [] }, 'TypertContribution requires a model')
-  assert.equal(contribution.invocations.length, 1)
-  assert.equal(contribution.invocations[0].id, 'ui-whale#whale/usage')
-  assert.equal(contribution.invocations[0].result.mode, 'src-json')
+  assert.equal(contribution.invocations.length, 2)
+  assert.deepEqual(contribution.invocations.map((invocation) => invocation.id), ['ui-whale#whale/usage', 'ui-whale#whale/balance'])
+  for (const invocation of contribution.invocations) assert.equal(invocation.result.mode, 'src-json')
 
   await withStubs({ env: { DEEPSEEK_PLATFORM_TOKEN: undefined, DEEPSEEK_API_KEY: undefined } }, async () => {
     const first = await service.usage()
@@ -311,5 +311,47 @@ test('the service registers a complete typert contribution and serves usage thro
     assert.equal(first.models[0].model, 'deepseek-v4-pro')
     assert.equal(counter.reads, 1, 'the service instance owns a reusable cache slot')
     assert.equal(second.totalTokens, first.totalTokens)
+  })
+})
+
+test('whale.balance reads the official balance endpoint and nothing else', async () => {
+  const billed = []
+  const ctx = {
+    reflect: { provide: () => {} },
+    get: () => undefined,
+    inject: (_deps, callback) => callback({ typert: { register: () => () => {} } }),
+  }
+  const service = new WhaleUsageService(ctx)
+  await withStubs({
+    env: { DEEPSEEK_API_KEY: 'sk-test', DEEPSEEK_PLATFORM_TOKEN: 'jwt-token' },
+    fetch: async (url) => {
+      billed.push(String(url))
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          is_available: true,
+          balance_infos: [{ currency: 'CNY', total_balance: '466.03', granted_balance: '0.00', topped_up_balance: '466.03' }],
+        }),
+      }
+    },
+  }, async () => {
+    assert.deepEqual(await service.balance(), {
+      ok: true,
+      balance: { currency: 'CNY', total: '466.03', granted: '0.00', toppedUp: '466.03', available: true },
+    })
+  })
+  assert.deepEqual(billed, ['https://api.deepseek.com/user/balance'], 'no session scan and no platform console request')
+})
+
+test('whale.balance reports an unknown balance instead of failing', async () => {
+  const ctx = {
+    reflect: { provide: () => {} },
+    get: () => undefined,
+    inject: (_deps, callback) => callback({ typert: { register: () => () => {} } }),
+  }
+  const service = new WhaleUsageService(ctx)
+  await withStubs({ env: { DEEPSEEK_API_KEY: undefined } }, async () => {
+    assert.deepEqual(await service.balance(), { ok: true, balance: null })
   })
 })
