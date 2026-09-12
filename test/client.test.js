@@ -9,13 +9,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 let captured = null
-globalThis.window = { __ModuleLoader__: { load: (definition) => { captured = definition } } }
+globalThis.window = { __ModuleLoader__: { load: (definition) => { captured = definition } }, innerWidth: 1200, innerHeight: 800 }
 
 /** Scripted hook state for the next render.
- * Order: sprayId, phase, data, shift, placed, dragging, hidden. */
+ * Order: sprayId, phase, data, shift, dragPos, pressed, swim, hovering, gripPulse, hidden. */
 let stateQueue = []
 /** Every setState argument recorded during a render, so handlers are observable. */
 let setterLog = []
+/** Node handed to the FIRST ref of a render (the whale element), for drag tests. */
+let refCount = 0
 
 const ReactShim = {
   createElement: (type, props, ...children) => ({ type, props: props || {}, children }),
@@ -24,7 +26,10 @@ const ReactShim = {
     (next) => { setterLog.push(typeof next === 'function' ? next(undefined) : next) },
   ],
   useEffect: () => {},
-  useRef: (initial) => ({ current: initial }),
+  useRef: (initial) => {
+    refCount += 1
+    return { current: refCount === 1 && globalThis.__refStub !== undefined ? globalThis.__refStub : initial }
+  },
 }
 
 await import('../lib/client.js')
@@ -60,6 +65,7 @@ const BALANCE_VALUE = {
 function render(state, props) {
   stateQueue = state
   setterLog = []
+  refCount = 0
   try {
     // `expand` invokes the component, which consumes the scripted hook state.
     return expand(WhaleApp(props || { callBalance: async () => ({ ok: true, value: BALANCE_VALUE }) }))
@@ -98,8 +104,26 @@ function findAll(node, predicate, out = []) {
 
 const byClass = (tree, name) => findAll(tree, (node) => typeof node.props.className === 'string' && node.props.className.split(' ').includes(name))[0]
 
+/** Build the hook-state array (order must match the component's useState calls). */
+function ST(over = {}) {
+  const state = {
+    sprayId: 0,
+    phase: 'idle',
+    data: null,
+    shift: 0,
+    dragPos: null,
+    pressed: false,
+    swim: { lane: null, delay: 0, key: 0 },
+    hovering: false,
+    gripPulse: false,
+    hidden: false,
+    ...over,
+  }
+  return [state.sprayId, state.phase, state.data, state.shift, state.dragPos, state.pressed, state.swim, state.hovering, state.gripPulse, state.hidden]
+}
+
 test('idle state renders the clickable whale and no bubble', () => {
-  const tree = render([0, 'idle', null, 0, null, false, false])
+  const tree = render(ST())
   assert.equal(textOf(tree), '', 'idle shows no text')
   assert.equal(tree.props.className, 'whl-frame')
   const whale = findAll(tree, (node) => node.props.role === 'button')[0]
@@ -110,7 +134,7 @@ test('idle state renders the clickable whale and no bubble', () => {
 })
 
 test('loading state announces the balance query', () => {
-  const tree = render([1, 'loading', null, 0, null, false, false])
+  const tree = render(ST({ sprayId: 1, phase: 'loading' }))
   const text = textOf(tree)
   assert.match(text, /账户余额/)
   assert.match(text, /正在查询余额/)
@@ -120,7 +144,7 @@ test('loading state announces the balance query', () => {
 })
 
 test('ready state shows only the account balance and its availability', () => {
-  const text = textOf(render([1, 'ready', BALANCE_VALUE, 0, null, false, false]))
+  const text = textOf(render(ST({ sprayId: 1, phase: 'ready', data: BALANCE_VALUE })))
   assert.match(text, /账户余额/)
   assert.match(text, /¥466\.03/, 'the balance amount is rendered in its own currency')
   assert.match(text, /可用/)
@@ -131,21 +155,21 @@ test('ready state shows only the account balance and its availability', () => {
 
 test('a USD balance uses the dollar symbol', () => {
   const data = { ok: true, balance: { currency: 'USD', total: '12.34', granted: null, toppedUp: null, available: true } }
-  assert.match(textOf(render([1, 'ready', data, 0, null, false, false])), /\$12\.34/)
+  assert.match(textOf(render(ST({ sprayId: 1, phase: 'ready', data: data }))), /\$12\.34/)
 })
 
 test('an unavailable balance degrades to a friendly line, not a zero', () => {
-  const text = textOf(render([1, 'ready', { ok: true, balance: null }, 0, null, false, false]))
+  const text = textOf(render(ST({ sprayId: 1, phase: 'ready', data: { ok: true, balance: null } })))
   assert.match(text, /余额暂不可用/)
   assert.equal(text.includes('¥0'), false, 'no fabricated zero')
 })
 
 test('error state degrades to the same friendly line', () => {
-  assert.match(textOf(render([1, 'error', null, 0, null, false, false])), /余额暂不可用/)
+  assert.match(textOf(render(ST({ sprayId: 1, phase: 'error' }))), /余额暂不可用/)
 })
 
 test('the bubble is shifted when the whale sits near a viewport edge', () => {
-  const bubble = byClass(render([1, 'ready', BALANCE_VALUE, -120, null, false, false]), 'whl-bubble')
+  const bubble = byClass(render(ST({ sprayId: 1, phase: 'ready', data: BALANCE_VALUE, shift: -120 })), 'whl-bubble')
   assert.deepEqual(bubble.props.style, { marginLeft: -120 })
 })
 
@@ -157,7 +181,7 @@ test('the bubble offers icon close and hide actions, in that order', () => {
     removeItem: (key) => store.delete(key),
   }
   try {
-    const tree = render([1, 'ready', BALANCE_VALUE, 0, null, false, false])
+    const tree = render(ST({ sprayId: 1, phase: 'ready', data: BALANCE_VALUE }))
     assert.equal(textOf(tree).includes('隐藏鲸鱼'), false, 'hide is an icon button, not a text button')
 
     const close = byClass(tree, 'whl-close')
@@ -186,27 +210,107 @@ test('the bubble offers icon close and hide actions, in that order', () => {
 
 test('both icon buttons appear in every bubble state', () => {
   for (const phase of ['loading', 'ready', 'error']) {
-    const tree = render([1, phase, phase === 'ready' ? BALANCE_VALUE : null, 0, null, false, false])
+    const tree = render(ST({ sprayId: 1, phase: phase, data: phase === 'ready' ? BALANCE_VALUE : null }))
     assert.ok(byClass(tree, 'whl-hide'), `hide icon in ${phase}`)
     assert.ok(byClass(tree, 'whl-close'), `close icon in ${phase}`)
   }
 })
 
-test('a placed whale offers 继续游动, and no other state does', () => {
-  const placedTree = render([1, 'ready', BALANCE_VALUE, 0, { left: 40, top: 60 }, false, false])
-  const resume = findAll(placedTree, (node) => node.props.className === 'whl-action' && node.children.includes('继续游动'))[0]
-  assert.ok(resume, 'a dropped whale can resume swimming')
-  resume.props.onClick()
-  assert.deepEqual(setterLog, [null], 'resuming clears the dropped position')
-  const swimmer = byClass(placedTree, 'whl-swimmer')
-  assert.deepEqual(swimmer.props.style, { left: '40px', top: '60px', animation: 'none' })
-  const idleTree = render([1, 'ready', BALANCE_VALUE, 0, null, false, false])
-  assert.equal(textOf(idleTree).includes('继续游动'), false, 'a swimming whale has no resume action')
-  assert.equal(byClass(idleTree, 'whl-actions'), undefined, 'no empty action row when swimming')
+test('dragging keeps the whale under the pointer, and releasing resumes the swim', () => {
+  globalThis.__refStub = { getBoundingClientRect: () => ({ left: 100, top: 200, width: 150, height: 100 }), setPointerCapture: () => {} }
+  try {
+    const tree = render(ST())
+    const whale = findAll(tree, (node) => node.props.role === 'button')[0]
+
+    whale.props.onPointerDown({ pointerId: 7, pointerType: 'mouse', button: 0, clientX: 100, clientY: 200 })
+    assert.deepEqual(setterLog, [true], 'pressing flips to the closed hand immediately')
+
+    setterLog = []
+    whale.props.onPointerMove({ pointerId: 7, clientX: 103, clientY: 202 })
+    assert.deepEqual(setterLog, [], 'a sub-threshold jiggle is not a drag')
+
+    whale.props.onPointerMove({ pointerId: 7, clientX: 160, clientY: 240 })
+    assert.deepEqual(setterLog, [{ left: 160, top: 240 }], 'the whale follows the pointer once past the threshold')
+
+    setterLog = []
+    whale.props.onPointerUp({ pointerId: 7, clientX: 160, clientY: 240 })
+    assert.equal(setterLog[0], false, 'releasing opens the hand again')
+    const swim = setterLog[1]
+    assert.equal(swim.lane, 240, 'the drop lane is kept')
+    const expectedPhase = (160 + 170) / (1200 + 250)
+    assert.ok(Math.abs(swim.delay + expectedPhase * 70) < 1e-9, 'the drop phase seeds the swim animation')
+    assert.equal(swim.key, 1, 'the swimmer is re-keyed so the new delay restarts the animation')
+    assert.equal(setterLog[2], null, 'the drag position is cleared on release')
+  } finally {
+    delete globalThis.__refStub
+  }
+})
+
+test('a dragged whale renders inline while dragging and animated after the drop', () => {
+  const dragging = byClass(render(ST({ dragPos: { left: 40, top: 60 } })), 'whl-swimmer')
+  assert.deepEqual(dragging.props.style, { left: '40px', top: '60px', animation: 'none' })
+  assert.ok(dragging.props.className.includes('whl-placed'), 'the bob freezes while dragging')
+
+  const dropped = byClass(render(ST({ swim: { lane: 300, delay: -12.5, key: 2 } })), 'whl-swimmer')
+  assert.deepEqual(dropped.props.style, { top: '300px', animationDelay: '-12.5s' }, 'no animation override: the whale keeps swimming')
+  assert.equal(dropped.props.className.includes('whl-placed'), false)
+  assert.equal(dropped.props.key, 2, 'the key lets React restart the animation with the new delay')
+})
+
+test('the resume phase math clamps to the swim path', () => {
+  const { resumeSwim, SWIM_PERIOD_S } = bundle.helpers
+  const viewport = { width: 1200, height: 800 }
+  assert.deepEqual(resumeSwim(-170, 100, viewport), { lane: 100, delay: 0 }, 'the left edge is phase zero')
+  const mid = resumeSwim((1200 + 250) / 2 - 170, 50, viewport)
+  assert.ok(Math.abs(mid.delay + SWIM_PERIOD_S / 2) < 1e-9, 'the middle of the path is half a period')
+  assert.deepEqual(resumeSwim(99999, 50, viewport), { lane: 50, delay: -SWIM_PERIOD_S }, 'past the right edge clamps to a full period')
+  assert.deepEqual(resumeSwim(-9999, 50, viewport), { lane: 50, delay: 0 }, 'before the left edge clamps to zero')
+  assert.deepEqual(resumeSwim(10, 50, { width: 0 }), { lane: 50, delay: 0 }, 'a degenerate viewport cannot produce NaN')
+})
+
+test('the grip pulse honours prefers-reduced-motion', () => {
+  const { prefersReducedMotion } = bundle.helpers
+  const original = globalThis.window.matchMedia
+  try {
+    delete globalThis.window.matchMedia
+    assert.equal(prefersReducedMotion(), false, 'no matchMedia means motion is allowed')
+    globalThis.window.matchMedia = () => ({ matches: true })
+    assert.equal(prefersReducedMotion(), true)
+    globalThis.window.matchMedia = () => ({ matches: false })
+    assert.equal(prefersReducedMotion(), false)
+  } finally {
+    if (original === undefined) delete globalThis.window.matchMedia
+    else globalThis.window.matchMedia = original
+  }
+})
+
+test('hovering arms the grip hint and leaving clears it', () => {
+  const tree = render(ST())
+  const whale = findAll(tree, (node) => node.props.role === 'button')[0]
+  whale.props.onMouseEnter()
+  assert.deepEqual(setterLog, [true], 'entering starts the hover state')
+  setterLog = []
+  whale.props.onMouseLeave()
+  assert.deepEqual(setterLog, [false], 'leaving clears it')
+})
+
+test('the bubble no longer renders a resume action', () => {
+  const tree = render(ST({ sprayId: 1, phase: 'ready', data: BALANCE_VALUE }))
+  assert.equal(textOf(tree).includes('继续游动'), false, 'dragging resumes swimming by itself')
+  assert.equal(byClass(tree, 'whl-actions'), undefined, 'no action row at all')
+})
+
+test('pressing the whale applies the closed-hand class', () => {
+  const tree = render(ST({ pressed: true }))
+  const whale = findAll(tree, (node) => node.props.role === 'button')[0]
+  assert.ok(whale.props.className.includes('whl-grip'), 'pressed shows the gripping hand')
+  const hovering = render(ST({ gripPulse: true }))
+  const pulsed = findAll(hovering, (node) => node.props.role === 'button')[0]
+  assert.ok(pulsed.props.className.includes('whl-grip'), 'the hover pulse also shows it')
 })
 
 test('hidden state renders only the bare whale restore chip', () => {
-  const tree = render([0, 'idle', null, 0, null, false, true])
+  const tree = render(ST({ hidden: true }))
   assert.equal(findAll(tree, (node) => node.props.role === 'button').length, 0, 'the whale itself is gone')
   const restore = byClass(tree, 'whl-restore')
   assert.ok(restore, 'a restore chip is offered instead')

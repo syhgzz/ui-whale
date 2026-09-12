@@ -99,24 +99,26 @@ dsh --profile web
 
 ## 使用
 
-- 点击鲸鱼 → 喷水 + 弹今日账单（30 秒后自动消失，可点右上角 × 关闭）
-- 账单为人民币（¥）：余额来自 DeepSeek 官方 `/user/balance` 接口（原生 CNY）；**精确消费来自平台用量页**（`platform.deepseek.com/usage` 背后的用量 API，需配置平台登录 Token，见下）；按「Pro 模型 / Flash-Vision-Exp / 其他模型」分组展示今日 token 与成本
-- 悬浮层不遮挡页面交互（除鲸鱼本体和关闭按钮外点击穿透）
+- 点击鲸鱼 → 喷水 + 弹出**账户余额**气泡（30 秒后自动消失；再点一次鲸鱼或点右上角 × 立即收起）
+- 余额为人民币（¥），来自 DeepSeek 官方 `/user/balance` 接口（原生 CNY）；拿不到时显示「余额暂不可用」，不做估算
+- **拖动鲸鱼可换位置**：按下时小手变抓紧，松手后从落点继续向右游，并保留落点所在的上下泳道；悬停时小手会在「张开/抓紧」间轻微切换并出现淡蓝光晕
+- 气泡右上角两个图标按钮：**隐藏鲸鱼**（眼睛带斜线）与**关闭**（×）。隐藏后右下角会出现一只小鲸鱼，点它可恢复（隐藏状态在刷新后保持）
+- 悬浮层不遮挡页面交互（除鲸鱼本体和右上角两个小按钮外点击穿透）
 
-### 配置平台 Token（查看精确消费）
+> 宿主侧仍保留完整的 `whale.usage`（会话日志聚合 + 平台用量页精确消费）链路，当前弹窗只调用 `whale.balance`；如需恢复完整账单，改回客户端调用 `usage` 即可。
 
-1. 浏览器登录 [platform.deepseek.com](https://platform.deepseek.com) → F12 开发者工具 → Application → Local Storage
-2. 找到值以 `eyJ` 开头的登录 token（JWT）并复制
-3. 写入 `~/.dsh/.credentials.yaml`（或环境变量 `DEEPSEEK_PLATFORM_TOKEN`），然后重启 dsh：
+### 配置凭据（余额接口需要）
+
+账单只读官方余额接口，用 `DEEPSEEK_API_KEY` 调用即可（写入 `~/.dsh/.credentials.yaml` 或环境变量）：
 
 ```yaml
 version: 1
 refs:
-  DEEPSEEK_API_KEY: sk-xxxx              # 原有：余额接口用
-  DEEPSEEK_PLATFORM_TOKEN: eyJhbGci...   # 新增：平台用量抓取用
+  DEEPSEEK_API_KEY: sk-xxxx              # 余额接口用
+  DEEPSEEK_PLATFORM_TOKEN: eyJhbGci...   # 可选：仅当你要用 whale.usage 抓平台精确消费时才需要
 ```
 
 > ⚠️ `version: 1` 是**必填**的顶层键：dsh 只读 version 1 的布局，缺了会在启动时报 `uses the pre-release flat layout`，整个 credentials 服务都起不来。该文件还必须仅属主可读 —— 建好后执行 `chmod 600 ~/.dsh/.credentials.yaml`，否则 dsh 会报 `readable beyond its owner` 并跳过整个 credentials 服务。
-
-未配置或 Token 失效时，账单仍然显示今日 token（本机会话日志）与余额，费用区域显示登录提示，不做估算。
+>
+> 平台 Token 是登录 [platform.deepseek.com](https://platform.deepseek.com) 后 Local Storage 里以 `eyJ` 开头的 JWT（仅 `whale.usage` 用）。
 
