@@ -76,18 +76,25 @@ dsh --profile web
 
 ## 卸载
 
-**① 移除依赖**
+**① 移除依赖**（包名是 `ui-whale`，不是源码目录名 `dsh-ui-whale`）
 
 ```bash
 cd ~/.dsh/profiles/web
 pnpm remove ui-whale
 ```
 
-**② 删除组合行**
+**② 确认链接已删除**（`pnpm remove` 偶尔不会清掉旧的符号链接，残留的链接会让鲸鱼继续出现）
+
+```bash
+ls -l ~/.dsh/profiles/web/node_modules/ui-whale   # 应报 No such file
+rm -f ~/.dsh/profiles/web/node_modules/ui-whale   # 若仍存在则手动删除
+```
+
+**③ 删除组合行**
 
 从 `~/.dsh/profiles/web/cordis.patch.yml` 删除 `ui-whale` 的 `insert` 块。
 
-**③ 重启**
+**④ 重启**
 
 ```bash
 dsh --profile web
